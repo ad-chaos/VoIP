@@ -16,10 +16,12 @@ class PacketType(IntEnum):
     Voice = 4
     Quit = 5
     ShutDown = 6
+    ValidUser = 7
+    InvalidUser = 8
 
 
 class MsgData:
-    attrs = ("username", "password", "group", "greet")
+    attrs = ("username", "password", "group", "extra")
 
     def __init__(self, **kwargs):
         for attr in self.attrs:
@@ -83,8 +85,12 @@ class Packet:
         return Packet(PacketType.Quit)
 
     @staticmethod
-    def welcome(msg: str = "Welcome to VoIP") -> Packet:
-        return Packet(PacketType.Welcome, MsgData(greet=msg))
+    def valid_user(msg: str = "Welcome to VoIP!") -> Packet:
+        return Packet(PacketType.ValidUser, MsgData(extra=msg))
+
+    @staticmethod
+    def invalid_user() -> Packet:
+        return Packet(PacketType.InvalidUser)
 
     def to_bytes(self) -> bytes:
         pkt = b""
@@ -109,12 +115,6 @@ def test():
 
     music = randbytes(32)
     cases = [
-        ("Welcome Packet", b'\x01{"greet":"Welcome to VoIP"}\x00', Packet.welcome()),
-        (
-            "Welcome Packet (with greet)",
-            b'\x01{"greet":"Custom Greet, gentleman"}\x00',
-            Packet.welcome("Custom Greet, gentleman"),
-        ),
         ("Quit Packet", b"\x05{}\x00", Packet(PacketType.Quit)),
         ("Quit Packet (cls method)", b"\x05{}\x00", Packet.quit()),
         (
@@ -138,28 +138,41 @@ def test():
         ),
         (
             "Login Packet (with Group)",
-            b'\x02{"username":"goofy-\xf0\x9f\x98\x9c","password":"fancy","group":"singers"}\x00',
+            b'\x02{"username":"ad","password":"tik","group":"singers"}\x00',
             Packet(
                 PacketType.Login,
                 MsgData(
-                    username=b"goofy-\xf0\x9f\x98\x9c".decode(),
-                    password="fancy",
+                    username="ad",
+                    password="tik",
                     group="singers",
                 ),
             ),
         ),
+        ("Valid User packet", b"\x07{}\x00", Packet(PacketType.ValidUser)),
+        (
+            "Valid User packet (cls method)",
+            b'\x07{"extra":"Welcome to VoIP!"}\x00',
+            Packet.valid_user(),
+        ),
+        (
+            "Valid User packet (greet)",
+            b'\x07{"extra":"Hello <user>! Welcome to VoIP ;)"}\x00',
+            Packet.valid_user("Hello <user>! Welcome to VoIP ;)"),
+        ),
+        ("Invalid User packet", b"\x08{}\x00", Packet(PacketType.InvalidUser)),
+        ("Invalid User packet", b"\x08{}\x00", Packet.invalid_user()),
     ]
 
     for kind, test, expect in cases:
         parsed = Packet.parse(test)
         print(kind)
-        print(end="[Forward] ")
+        print(end="[Parse]:")
         if parsed == expect:
-            print("✅")
+            print(end="✅ ")
         else:
             print("❌", "\nExpected:", expect, "\nGot:", parsed, end="\n\n")
 
-        print(end="[Reverse] ")
+        print(end="[Bytes]:")
         if parsed.to_bytes() == test:
             print("✅")
         else:
