@@ -2,7 +2,7 @@ from __future__ import annotations
 from enum import IntEnum
 import json
 
-# The Server PacketFormat
+# The Packet Format:
 #
 # 1 byte packet id
 # msg(optional): key:value pairs separated by comma terminated by a NUL character
@@ -21,7 +21,7 @@ class PacketType(IntEnum):
 
 
 class MsgData:
-    attrs = ("username", "password", "group", "extra")
+    attrs = ("username", "password", "group", "extra", "fs")
 
     def __init__(self, **kwargs):
         for attr in self.attrs:
@@ -113,7 +113,7 @@ class Packet:
 def test():
     from random import randbytes
 
-    music = randbytes(32)
+    voice = randbytes(32)
     cases = [
         ("Quit Packet", b"\x05{}\x00", Packet(PacketType.Quit)),
         ("Quit Packet (cls method)", b"\x05{}\x00", Packet.quit()),
@@ -129,11 +129,10 @@ def test():
         ),
         (
             "Login Packet (Unicode)",
-            b'\x02{"username":"goofy-\xf0\x9f\x98\x9c","password":"fancy"}\x00' + music,
+            b'\x02{"username":"goofy-\xf0\x9f\x98\x9c","password":"fancy"}\x00',
             Packet(
                 PacketType.Login,
                 MsgData(username=b"goofy-\xf0\x9f\x98\x9c".decode(), password="fancy"),
-                music,
             ),
         ),
         (
@@ -161,6 +160,11 @@ def test():
         ),
         ("Invalid User packet", b"\x08{}\x00", Packet(PacketType.InvalidUser)),
         ("Invalid User packet", b"\x08{}\x00", Packet.invalid_user()),
+        (
+            "Voice Packet",
+            b'\x04{"fs":44100}\x00' + voice,
+            Packet(PacketType.Voice, MsgData(fs=44100), voice),
+        ),
     ]
 
     for kind, test, expect in cases:
