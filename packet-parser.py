@@ -83,7 +83,7 @@ class Packet:
         return Packet(PacketType.Quit)
 
     @staticmethod
-    def welcome(msg: bytes = b"Welcome to VoIP") -> Packet:
+    def welcome(msg: str = "Welcome to VoIP") -> Packet:
         return Packet(PacketType.Welcome, MsgData(greet=msg))
 
     def to_bytes(self) -> bytes:
@@ -109,8 +109,12 @@ def test():
 
     music = randbytes(32)
     cases = [
-        # ("Welcome Packet", b"\x01{}\x00", Packet.welcome()),
-        # ("Welcome Packet (with greet)", b"\x01|", Packet.welcome()),
+        ("Welcome Packet", b'\x01{"greet":"Welcome to VoIP"}\x00', Packet.welcome()),
+        (
+            "Welcome Packet (with greet)",
+            b'\x01{"greet":"Custom Greet, gentleman"}\x00',
+            Packet.welcome("Custom Greet, gentleman"),
+        ),
         ("Quit Packet", b"\x05{}\x00", Packet(PacketType.Quit)),
         ("Quit Packet (cls method)", b"\x05{}\x00", Packet.quit()),
         (
@@ -159,9 +163,7 @@ def test():
         if parsed.to_bytes() == test:
             print("✅")
         else:
-            print(
-                "❌", "\nExpected:", test, "\nGot:", parsed.to_bytes(), end="\n\n"
-            )
+            print("❌", "\nExpected:", test, "\nGot:", parsed.to_bytes(), end="\n\n")
 
         print()
 
