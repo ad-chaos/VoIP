@@ -1,11 +1,11 @@
 from __future__ import annotations
 from enum import IntEnum
-from typing import Iterable
+import json
 
 # The Server PacketFormat
 #
 # 1 byte packet id
-# msg(optional): key:value pairs separated by comma terminated by a |
+# msg(optional): key:value pairs separated by comma terminated by a NUL character
 # audio(optional): the rest of it is audio
 
 
@@ -30,7 +30,6 @@ class MsgData:
 
     @staticmethod
     def from_bytes(bts: bytes) -> MsgData:
-        import json
         msg = bts.decode()
         msgdata = MsgData()
         for key, value in json.loads(msg).items():
@@ -41,12 +40,16 @@ class MsgData:
 
     def to_bytes(self) -> bytes:
         return (
-            b",".join(
-                f"{attr}:{getattr(self, attr)}".encode()
-                for attr in self.attrs
-                if getattr(self, attr) is not None
-            )
-            + b"|"
+            json.dumps(
+                dict(
+                    (attr, getattr(self, attr))
+                    for attr in self.attrs
+                    if getattr(self, attr) is not None
+                ),
+                ensure_ascii=False,
+                separators=(",", ":"),
+            ).encode()
+            + b"\x00"
         )
 
     def __repr__(self) -> str:
@@ -77,7 +80,7 @@ class Packet:
 
     @staticmethod
     def quit() -> Packet:
-        return Packet(PacketType.ShutDown)
+        return Packet(PacketType.Quit)
 
     @staticmethod
     def welcome(msg: bytes = b"Welcome to VoIP") -> Packet:
@@ -106,22 +109,23 @@ def test():
 
     music = randbytes(32)
     cases = [
-        ("Welcome Packet", b"\x01|", Packet.welcome()),
-        ("Welcome Packet (with greet)", b"\x01|", Packet.welcome()),
-        ("Quit Packet", b"\x05|", Packet(PacketType.Quit)),
+        # ("Welcome Packet", b"\x01{}\x00", Packet.welcome()),
+        # ("Welcome Packet (with greet)", b"\x01|", Packet.welcome()),
+        ("Quit Packet", b"\x05{}\x00", Packet(PacketType.Quit)),
+        ("Quit Packet (cls method)", b"\x05{}\x00", Packet.quit()),
         (
             "Login Packet",
-            b"\x02username:ad,password:a|",
+            b'\x02{"username":"ad","password":"a"}\x00',
             Packet(PacketType.Login, MsgData(username="ad", password="a")),
         ),
         (
             "Signin Packet",
-            b"\x03username:ad,password:a|",
+            b'\x03{"username":"ad","password":"a"}\x00',
             Packet(PacketType.Signin, MsgData(username="ad", password="a")),
         ),
         (
             "Login Packet (Unicode)",
-            b"\x02username:goofy-\xf0\x9f\x98\x9c,password:fancy|" + music,
+            b'\x02{"username":"goofy-\xf0\x9f\x98\x9c","password":"fancy"}\x00' + music,
             Packet(
                 PacketType.Login,
                 MsgData(username=b"goofy-\xf0\x9f\x98\x9c".decode(), password="fancy"),
@@ -130,8 +134,7 @@ def test():
         ),
         (
             "Login Packet (with Group)",
-            b"\x02username:goofy-\xf0\x9f\x98\x9c,password:fancy,group:singers|"
-            + music,
+            b'\x02{"username":"goofy-\xf0\x9f\x98\x9c","password":"fancy","group":"singers"}\x00',
             Packet(
                 PacketType.Login,
                 MsgData(
@@ -139,26 +142,25 @@ def test():
                     password="fancy",
                     group="singers",
                 ),
-                music,
             ),
         ),
     ]
 
     for kind, test, expect in cases:
         parsed = Packet.parse(test)
+        print(kind)
+        print(end="[Forward] ")
         if parsed == expect:
-            print("✅", kind)
+            print("✅")
         else:
-            print("❌", kind, "\nExpected:", expect, "\nGot:", parsed, end="\n\n")
+            print("❌", "\nExpected:", expect, "\nGot:", parsed, end="\n\n")
 
+        print(end="[Reverse] ")
         if parsed.to_bytes() == test:
-            print(
-                "✅ (to_bytes)",
-                kind,
-            )
+            print("✅")
         else:
             print(
-                "❌", kind, "\nExpected:", test, "\nGot:", parsed.to_bytes(), end="\n\n"
+                "❌", "\nExpected:", test, "\nGot:", parsed.to_bytes(), end="\n\n"
             )
 
         print()
