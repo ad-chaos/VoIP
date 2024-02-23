@@ -8,6 +8,9 @@ import json
 # msg(optional): key:value pairs separated by comma terminated by a NUL character
 # audio(optional): the rest of it is audio
 
+VOIP_PORT = 8096
+NAddr = tuple[str, int]
+
 
 class PacketType(IntEnum):
     Msg = 1
@@ -21,12 +24,19 @@ class PacketType(IntEnum):
 
 
 class MsgData:
-    def __init__(self, **kwargs):
-        self.username = kwargs.get("username")
-        self.password = kwargs.get("password")
-        self.group = kwargs.get("group")
-        self.extra = kwargs.get("extra")
-        self.fs = kwargs.get("fs")
+    def __init__(
+        self,
+        username: str | None = None,
+        password: str | None = None,
+        group: str | None = None,
+        extra: str | None = None,
+        fs: str | None = None,
+    ):
+        self.username = username
+        self.password = password
+        self.group = group
+        self.extra = extra
+        self.fs = fs
 
     @staticmethod
     def from_bytes(bts: bytes) -> MsgData:
@@ -92,12 +102,20 @@ class Packet:
     def invalid_user(msg: str = "Invalid Username or Password") -> Packet:
         return Packet(PacketType.InvalidUser, MsgData(extra=msg))
 
+    @staticmethod
+    def login(username: str, password: str) -> Packet:
+        return Packet(PacketType.Login, MsgData(username=username, password=password))
+
+    @staticmethod
+    def signin(username: str, password: str) -> Packet:
+        return Packet(PacketType.Signin, MsgData(username=username, password=password))
+
     def to_bytes(self) -> bytes:
         pkt = b""
         pkt += self.ty.to_bytes(1, "big")
         pkt += self.msg.to_bytes()
         pkt += self.audio
-        return pkt
+        return len(pkt).to_bytes(4, "big") + pkt
 
     def __eq__(self, other: Packet) -> bool:  # type: ignore[override]
         return (

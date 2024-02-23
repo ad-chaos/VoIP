@@ -2,11 +2,12 @@ from __future__ import annotations
 
 from socket import socket, AF_INET, SOCK_STREAM
 from threading import Thread
-from typing import Callable
+from typing import Callable, Literal
 from enum import IntEnum, auto
-from packet_parser import Packet, PacketType, MsgData
+from packet_parser import Packet, PacketType, MsgData, VOIP_PORT, NAddr
+from selectors import DefaultSelector, EVENT_READ, EVENT_WRITE
+from time import sleep
 
-NAddr = tuple[str, int]
 BUF_SIZE = 8192
 DATABASE: dict[str, str] = {
     "ad": "a",
@@ -20,7 +21,7 @@ class ClientState(IntEnum):
     UnAuthenticated = auto()
 
 
-class Client(Thread):
+class ClientThread(Thread):
     def __init__(
         self, conn: socket, addr: NAddr, id: int, on_close: Callable[[int], None]
     ) -> None:
@@ -31,6 +32,8 @@ class Client(Thread):
         self.id = id
         self.on_close = on_close
         self.username = ""
+        self.selector = DefaultSelector()
+        self.selector.register(self, EVENT_READ | EVENT_WRITE)
 
     def fileno(self) -> int:
         return self.request.fileno()
@@ -45,8 +48,8 @@ class Client(Thread):
 
         return Packet.parse(bts)
 
-    def send_packet(self, pkt: Packet):
-        pass
+    def send_packet(self, pkt: Packet) -> None:
+        self.request.sendall(pkt.to_bytes())
 
     def run(self) -> None:
         match self.authenticate():
@@ -55,39 +58,70 @@ class Client(Thread):
             case ClientState.UnAuthenticated:
                 self.on_close(self.id)
 
-    def chat(self):
-        while True:
-            recv_pkt = self.read_packet()
-            if recv_pkt.ty == PacketType.Quit:
-                self.on_close(self.id)
-                break
-            self.send_packet(
-                Packet(
-                    PacketType.Msg,
-                    msg=MsgData(
-                        extra=f"You are {self.username} and sent: {recv_pkt.msg.extra}"
-                    ),
-                )
-            )
+    def chat(self) -> None:
+        alive = True
+        while alive:
+            for ready, events in self.selector.select():
+                if events & EVENT_READ and self.read_packet().ty == PacketType.Quit:
+                    self.send_packet(Packet.shutdown())
+                    self.on_close(self.id)
+                    alive = False
+                    break
+                elif events & EVENT_WRITE:
+                    sleep(0.5)
+                    self.send_packet(
+                        Packet(
+                            PacketType.Msg,
+                            msg=MsgData(
+                                extra=f"You are {self.username} and here's a greet"
+                            ),
+                        )
+                    )
 
     def authenticate(self) -> ClientState:
         pkt = self.read_packet()
 
+        if pkt.msg.username is None:
+            return self.invalid()
+
         self.username = pkt.msg.username
 
+        match pkt.ty:
+            case PacketType.Login:
+                return self.login(pkt)
+            case PacketType.Signin:
+                return self.signin(pkt)
+            case _:
+                assert False
+
+    def login(self, pkt: Packet) -> ClientState:
         if DATABASE.get(self.username) == pkt.msg.password:
-            self.send_packet(
-                Packet.valid_user(SERVER_NAME + " Welcome to the World of Voicing!")
-            )
-            return ClientState.Authenticated
+            return self.valid()
         else:
-            self.send_packet(
-                Packet.invalid_user(SERVER_NAME + " Invalid username of password")
-            )
-            return ClientState.UnAuthenticated
+            return self.invalid()
+
+    def signin(self, pkt: Packet) -> ClientState:
+        if pkt.msg.username and pkt.msg.password:
+            DATABASE[pkt.msg.username] = pkt.msg.password
+        else:
+            return self.invalid()
+        return self.valid()
+
+    def valid(self) -> Literal[ClientState.Authenticated]:
+        self.send_packet(
+            Packet.valid_user(SERVER_NAME + " Welcome to the World of Voicing!")
+        )
+        return ClientState.Authenticated
+
+    def invalid(self) -> Literal[ClientState.UnAuthenticated]:
+        self.send_packet(
+            Packet.invalid_user(SERVER_NAME + " Invalid username or password")
+        )
+        return ClientState.UnAuthenticated
 
     def cleanup(self) -> None:
         self.request.close()
+        self.selector.close()
 
 
 class Server:
@@ -97,14 +131,14 @@ class Server:
         server_sock.listen()
         self.socket = server_sock
 
-        self.clients: list[Client] = []
+        self.clients: list[ClientThread] = []
         self.addr = addr
         self.cid = 1
 
     def handle_request(self) -> None:
         csock, addr = self.socket.accept()
         self.cid += 1
-        client = Client(csock, addr, self.cid, self.on_auth_fail)
+        client = ClientThread(csock, addr, self.cid, self.on_auth_fail)
         client.start()
         self.clients.append(client)
 
@@ -132,5 +166,6 @@ class Server:
 
 
 if __name__ == "__main__":
-    with Server(("localhost", 8096)) as server:
+    with Server(("localhost", VOIP_PORT)) as server:
+        print(f"Server ready on port: {VOIP_PORT}")
         server.serve_forever()
