@@ -68,15 +68,16 @@ class ClientThread(Thread):
                     alive = False
                     break
                 elif events & EVENT_WRITE:
-                    sleep(0.5)
-                    self.send_packet(
-                        Packet(
-                            PacketType.Msg,
-                            msg=MsgData(
-                                extra=f"You are {self.username} and here's a greet"
-                            ),
-                        )
-                    )
+                    self.send_msg()
+
+    def send_msg(self) -> None:
+        sleep(0.5)
+        self.send_packet(
+            Packet(
+                PacketType.Msg,
+                msg=MsgData(extra=SERVER_NAME + f" You are {self.username} and here's a greet"),
+            )
+        )
 
     def authenticate(self) -> ClientState:
         pkt = self.read_packet()
