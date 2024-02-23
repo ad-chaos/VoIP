@@ -4,6 +4,7 @@ from socket import socket, AF_INET, SOCK_STREAM
 from threading import Thread
 from typing import Callable
 from enum import IntEnum, auto
+from packet_parser import Packet
 
 NAddr = tuple[str, int]
 BUF_SIZE = 8192
@@ -11,6 +12,7 @@ DATABASE: dict[str, str] = {
     "ad": "a",
     "sad": "s",
 }
+SERVER_NAME = "[Khazad-dûm]"
 
 
 class ClientState(IntEnum):
@@ -34,6 +36,19 @@ class Client(Thread):
     def fileno(self) -> int:
         return self.request.fileno()
 
+    def read_packet(self) -> Packet:
+        size = int.from_bytes(self.request.recv(4), "big")
+        bts = b""
+        while size > 0:
+            rbts = self.request.recv(size)
+            size -= len(rbts)
+            bts += rbts
+
+        return Packet.parse(bts)
+
+    def send_packet(self, pkt: Packet):
+        pass
+
     def run(self) -> None:
         match self.authenticate():
             case ClientState.Authenticated:
@@ -52,15 +67,19 @@ class Client(Thread):
             self.request.sendall(recvd.encode())
 
     def authenticate(self) -> ClientState:
-        self.username = self.request.recv(BUF_SIZE).decode()
-        self.password = self.request.recv(BUF_SIZE).decode()
+        pkt = self.read_packet()
+
+        self.username = pkt.msg.username
+        self.password = pkt.msg.password
 
         if DATABASE.get(self.username) == self.password:
-            self.request.sendall("1[Khazad-dûm]: Welcome to VoIP".encode())
+            self.send_packet(
+                Packet.valid_user(SERVER_NAME + " Welcome to the World of Voicing!")
+            )
             return ClientState.Authenticated
         else:
-            self.request.sendall(
-                "0[Khazad-dûm]: Incorrect Username or Password!".encode()
+            self.send_packet(
+                Packet.invalid_user(SERVER_NAME + " Invalid username of password")
             )
             return ClientState.UnAuthenticated
 
@@ -107,6 +126,7 @@ class Server:
         for client in self.clients:
             client.cleanup()
             client.join()
+
 
 if __name__ == "__main__":
     with Server(("localhost", 8096)) as server:

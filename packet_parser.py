@@ -21,21 +21,19 @@ class PacketType(IntEnum):
 
 
 class MsgData:
-    attrs = ("username", "password", "group", "extra", "fs")
-
     def __init__(self, **kwargs):
-        for attr in self.attrs:
-            if attr in kwargs:
-                setattr(self, attr, kwargs[attr])
-            else:
-                setattr(self, attr, None)
+        self.username = kwargs.get("username")
+        self.password = kwargs.get("password")
+        self.group = kwargs.get("group")
+        self.extra = kwargs.get("extra")
+        self.fs = kwargs.get("fs")
 
     @staticmethod
     def from_bytes(bts: bytes) -> MsgData:
         msg = bts.decode()
         msgdata = MsgData()
         for key, value in json.loads(msg).items():
-            if key in msgdata.attrs:
+            if key in msgdata.__dict__:
                 setattr(msgdata, key, value)
 
         return msgdata
@@ -45,7 +43,7 @@ class MsgData:
             json.dumps(
                 dict(
                     (attr, getattr(self, attr))
-                    for attr in self.attrs
+                    for attr in self.__dict__
                     if getattr(self, attr) is not None
                 ),
                 ensure_ascii=False,
@@ -55,10 +53,10 @@ class MsgData:
         )
 
     def __repr__(self) -> str:
-        return f"MsgData({', '.join(f'{attr}={getattr(self, attr)}' for attr in self.attrs)})"
+        return f"MsgData({', '.join(f'{attr}={getattr(self, attr)}' for attr in self.__dict__)})"
 
     def __eq__(self, other) -> bool:
-        return all(getattr(self, attr) == getattr(other, attr) for attr in self.attrs)
+        return all(getattr(self, attr) == getattr(other, attr) for attr in self.__dict__)
 
 
 class Packet:
@@ -89,8 +87,8 @@ class Packet:
         return Packet(PacketType.ValidUser, MsgData(extra=msg))
 
     @staticmethod
-    def invalid_user() -> Packet:
-        return Packet(PacketType.InvalidUser)
+    def invalid_user(msg: str = "Invalid Username or Password") -> Packet:
+        return Packet(PacketType.InvalidUser, MsgData(extra=msg))
 
     def to_bytes(self) -> bytes:
         pkt = b""
