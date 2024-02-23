@@ -10,7 +10,7 @@ import json
 
 
 class PacketType(IntEnum):
-    Welcome = 1
+    Msg = 1
     Login = 2
     Signin = 3
     Voice = 4
@@ -53,10 +53,12 @@ class MsgData:
         )
 
     def __repr__(self) -> str:
-        return f"MsgData({', '.join(f'{attr}={getattr(self, attr)}' for attr in self.__dict__)})"
+        return f"MsgData({', '.join(f'{attr}={getattr(self, attr)!r}' for attr in self.__dict__)})"
 
     def __eq__(self, other) -> bool:
-        return all(getattr(self, attr) == getattr(other, attr) for attr in self.__dict__)
+        return all(
+            getattr(self, attr) == getattr(other, attr) for attr in self.__dict__
+        )
 
 
 class Packet:
@@ -105,7 +107,7 @@ class Packet:
         )
 
     def __repr__(self) -> str:
-        return f"Packet(ty={self.ty}, msg={self.msg}, audio={self.audio!r})"
+        return f"Packet(ty={self.ty!r}, msg={self.msg!r}, audio={self.audio!r})"
 
 
 def test():
@@ -113,6 +115,11 @@ def test():
 
     voice = randbytes(32)
     cases = [
+        (
+            "Message Packet",
+            b'\x01{"extra":"some-message"}\x00',
+            Packet(PacketType.Msg, MsgData(extra="some-message")),
+        ),
         ("Quit Packet", b"\x05{}\x00", Packet(PacketType.Quit)),
         ("Quit Packet (cls method)", b"\x05{}\x00", Packet.quit()),
         (
@@ -157,7 +164,11 @@ def test():
             Packet.valid_user("Hello <user>! Welcome to VoIP ;)"),
         ),
         ("Invalid User packet", b"\x08{}\x00", Packet(PacketType.InvalidUser)),
-        ("Invalid User packet", b"\x08{}\x00", Packet.invalid_user()),
+        (
+            "Invalid User packet",
+            b'\x08{"extra":"Invalid Username or Password"}\x00',
+            Packet.invalid_user(),
+        ),
         (
             "Voice Packet",
             b'\x04{"fs":44100}\x00' + voice,

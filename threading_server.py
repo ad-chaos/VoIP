@@ -4,7 +4,7 @@ from socket import socket, AF_INET, SOCK_STREAM
 from threading import Thread
 from typing import Callable
 from enum import IntEnum, auto
-from packet_parser import Packet
+from packet_parser import Packet, PacketType, MsgData
 
 NAddr = tuple[str, int]
 BUF_SIZE = 8192
@@ -31,7 +31,6 @@ class Client(Thread):
         self.id = id
         self.on_close = on_close
         self.username = ""
-        self.password = ""
 
     def fileno(self) -> int:
         return self.request.fileno()
@@ -58,21 +57,25 @@ class Client(Thread):
 
     def chat(self):
         while True:
-            recvd = self.request.recv(BUF_SIZE).decode()
-            if recvd == "q":
-                self.request.sendall("Alright Bye!".encode())
+            recv_pkt = self.read_packet()
+            if recv_pkt.ty == PacketType.Quit:
                 self.on_close(self.id)
                 break
-            recvd = f"You are {self.username} and sent: " + recvd
-            self.request.sendall(recvd.encode())
+            self.send_packet(
+                Packet(
+                    PacketType.Msg,
+                    msg=MsgData(
+                        extra=f"You are {self.username} and sent: {recv_pkt.msg.extra}"
+                    ),
+                )
+            )
 
     def authenticate(self) -> ClientState:
         pkt = self.read_packet()
 
         self.username = pkt.msg.username
-        self.password = pkt.msg.password
 
-        if DATABASE.get(self.username) == self.password:
+        if DATABASE.get(self.username) == pkt.msg.password:
             self.send_packet(
                 Packet.valid_user(SERVER_NAME + " Welcome to the World of Voicing!")
             )
