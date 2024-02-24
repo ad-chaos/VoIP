@@ -28,13 +28,13 @@ class MsgData:
         self,
         username: str | None = None,
         password: str | None = None,
-        group: str | None = None,
+        reciever: str | None = None,
         extra: str | None = None,
         fs: str | None = None,
     ):
         self.username = username
         self.password = password
-        self.group = group
+        self.reciever = reciever
         self.extra = extra
         self.fs = fs
 
@@ -159,14 +159,14 @@ def test():
             ),
         ),
         (
-            "Login Packet (with Group)",
-            b'\x02{"username":"ad","password":"tik","group":"singers"}\x00',
+            "Login Packet (with reciever)",
+            b'\x02{"username":"ad","password":"tik","reciever":"vdh"}\x00',
             Packet(
                 PacketType.Login,
                 MsgData(
                     username="ad",
                     password="tik",
-                    group="singers",
+                    reciever="vdh",
                 ),
             ),
         ),
@@ -204,10 +204,16 @@ def test():
             print("❌", "\nExpected:", expect, "\nGot:", parsed, end="\n\n")
 
         print(end="[Bytes]:")
-        if parsed.to_bytes() == test:
+        bts = parsed.to_bytes()
+        length, rest = int.from_bytes(bts[:4], "big"), bts[4:]
+        if rest == test and length == len(rest):
             print("✅")
         else:
-            print("❌", "\nExpected:", test, "\nGot:", parsed.to_bytes(), end="\n\n")
+            print(f"""\
+❌
+Expected: {test} (length: {len(test)})
+Got: {rest}      (length: {len(rest)})
+""")
 
         print()
 
