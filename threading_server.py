@@ -4,36 +4,29 @@ from socket import socket, AF_INET, SOCK_STREAM
 from threading import Thread
 from typing import Callable, Literal
 from enum import IntEnum, auto
-from packet_parser import Packet, PacketType, MsgData, VOIP_PORT, NAddr
+from packet_parser import Packet, PacketType, VOIP_PORT, NAddr
 from selectors import DefaultSelector, EVENT_READ, EVENT_WRITE
-from time import sleep
 
-BUF_SIZE = 8192
 DATABASE: dict[str, str] = {
     "ad": "a",
     "sad": "s",
 }
+
 SERVER_NAME = "[Khazad-dûm]"
 
 
 class ClientState(IntEnum):
-    Authenticated = auto()
-    UnAuthenticated = auto()
+    Conversing = auto()
+    Quitting = auto()
 
 
-class ClientThread(Thread):
-    def __init__(
-        self, conn: socket, addr: NAddr, id: int, on_close: Callable[[int], None]
-    ) -> None:
-        super().__init__()
-
+class Client:
+    def __init__(self, conn: socket, addr: NAddr) -> None:
         self.request = conn
         self.req_addr = addr
-        self.id = id
-        self.on_close = on_close
-        self.username = ""
-        self.selector = DefaultSelector()
-        self.selector.register(self, EVENT_READ | EVENT_WRITE)
+        self.sender = ""
+        self.reciever = ""
+        self.state = ClientState.Conversing
 
     def fileno(self) -> int:
         return self.request.fileno()
@@ -48,44 +41,27 @@ class ClientThread(Thread):
 
         return Packet.parse(bts)
 
+    def read_packets(self) -> list[Packet]:
+        pkts = [self.read_packet()]
+        self.request.setblocking(False)
+        try:
+            while True:
+                pkts.append(self.read_packet())
+        except BlockingIOError:
+            self.request.setblocking(True)
+            return pkts
+
     def send_packet(self, pkt: Packet) -> None:
         self.request.sendall(pkt.to_bytes())
 
-    def run(self) -> None:
-        match self.authenticate():
-            case ClientState.Authenticated:
-                self.chat()
-            case ClientState.UnAuthenticated:
-                self.on_close(self.id)
-
-    def chat(self) -> None:
-        alive = True
-        while alive:
-            for ready, events in self.selector.select():
-                if events & EVENT_READ and self.read_packet().ty == PacketType.Quit:
-                    self.send_packet(Packet.shutdown())
-                    self.on_close(self.id)
-                    alive = False
-                    break
-                elif events & EVENT_WRITE:
-                    self.send_msg()
-
-    def send_msg(self) -> None:
-        sleep(0.5)
-        self.send_packet(
-            Packet(
-                PacketType.Msg,
-                msg=MsgData(extra=SERVER_NAME + f" You are {self.username} and here's a greet"),
-            )
-        )
-
-    def authenticate(self) -> ClientState:
+    def authenticate(self) -> bool:
         pkt = self.read_packet()
 
-        if pkt.msg.username is None:
+        if not (pkt.msg.sender and pkt.msg.reciever):
             return self.invalid()
 
-        self.username = pkt.msg.username
+        self.sender = pkt.msg.sender
+        self.reciever = pkt.msg.reciever
 
         match pkt.ty:
             case PacketType.Login:
@@ -95,34 +71,86 @@ class ClientThread(Thread):
             case _:
                 assert False
 
-    def login(self, pkt: Packet) -> ClientState:
-        if DATABASE.get(self.username) == pkt.msg.password:
+    def login(self, pkt: Packet) -> bool:
+        if DATABASE.get(self.sender) == pkt.msg.password:
             return self.valid()
         else:
             return self.invalid()
 
-    def signin(self, pkt: Packet) -> ClientState:
-        if pkt.msg.username and pkt.msg.password:
-            DATABASE[pkt.msg.username] = pkt.msg.password
+    def signin(self, pkt: Packet) -> bool:
+        if pkt.msg.sender and pkt.msg.password:
+            DATABASE[pkt.msg.sender] = pkt.msg.password
+            return self.valid()
         else:
             return self.invalid()
-        return self.valid()
 
-    def valid(self) -> Literal[ClientState.Authenticated]:
+    def valid(self) -> Literal[True]:
         self.send_packet(
             Packet.valid_user(SERVER_NAME + " Welcome to the World of Voicing!")
         )
-        return ClientState.Authenticated
+        return True
 
-    def invalid(self) -> Literal[ClientState.UnAuthenticated]:
+    def invalid(self) -> Literal[False]:
         self.send_packet(
-            Packet.invalid_user(SERVER_NAME + " Invalid username or password")
+            Packet.invalid_user(
+                SERVER_NAME + " Invalid username or password or reciever"
+            )
         )
-        return ClientState.UnAuthenticated
+        return False
 
     def cleanup(self) -> None:
         self.request.close()
-        self.selector.close()
+
+
+class PairedClientThread(Thread):
+    def __init__(
+        self, a: Client, b: Client, id: int, on_close: Callable[[int], None]
+    ) -> None:
+        super().__init__()
+        self.a = a
+        self.b = b
+        self.id = id
+        self.on_close = on_close
+
+        self.a_sent: list[Packet] = []
+        self.b_sent: list[Packet] = []
+
+        self.selector = DefaultSelector()
+        self.selector.register(
+            self.a, EVENT_READ | EVENT_WRITE, (self.a_sent, self.b_sent)
+        )
+        self.selector.register(
+            self.b, EVENT_READ | EVENT_WRITE, (self.b_sent, self.a_sent)
+        )
+
+    def run(self) -> None:
+        alive = 2
+        while alive:
+            for key, event in self.selector.select():
+                (tx, rx) = key.data
+                client: Client = key.fileobj  # type: ignore
+
+                if event & EVENT_READ:
+                    pkt = client.read_packet()
+                    if pkt.ty == PacketType.Quit:
+                        client.state = ClientState.Quitting
+                        continue
+                    rx.extend(client.read_packets())
+
+                if event & EVENT_WRITE:
+                    if client.state == ClientState.Quitting:
+                        client.send_packet(Packet.shutdown())
+                        self.selector.unregister(client)
+                        alive -= 1
+                        continue
+
+                    for pkt in tx:
+                        client.send_packet(pkt)
+                    tx.clear()
+
+    def cleanup(self) -> None:
+        self.a.cleanup()
+        self.b.cleanup()
 
 
 class Server:
@@ -132,22 +160,49 @@ class Server:
         server_sock.listen()
         self.socket = server_sock
 
-        self.clients: list[ClientThread] = []
+        self.paired_clients: list[PairedClientThread] = []
+        self.waiting_clients: list[Client] = []
         self.addr = addr
         self.cid = 1
 
     def handle_request(self) -> None:
         csock, addr = self.socket.accept()
-        self.cid += 1
-        client = ClientThread(csock, addr, self.cid, self.on_auth_fail)
-        client.start()
-        self.clients.append(client)
+        sender = Client(csock, addr)
+
+        if not sender.authenticate():
+            sender.invalid()
+            sender.cleanup()
+            return
+
+        if (reciever := self.get_potential_reciever(sender)) is not None:
+            self.cid += 1
+            paired_client = PairedClientThread(
+                sender, reciever, self.cid, self.on_auth_fail
+            )
+            paired_client.start()
+            self.paired_clients.append(paired_client)
+            self.waiting_clients.remove(reciever)
+            return
+
+        self.waiting_clients.append(sender)
+
+    def get_potential_reciever(self, sender: Client) -> Client | None:
+        return next(
+            (
+                reciever
+                for reciever in self.waiting_clients
+                if reciever.sender == sender.reciever
+            ),
+            None,
+        )
 
     def on_auth_fail(self, cid: int) -> None:
-        client = next((client for client in self.clients if client.id == cid), None)
+        client = next(
+            (client for client in self.paired_clients if client.id == cid), None
+        )
         if client is not None:
             client.cleanup()
-            self.clients.remove(client)
+            self.paired_clients.remove(client)
 
     def serve_forever(self) -> None:
         try:
@@ -161,7 +216,7 @@ class Server:
 
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:
         self.socket.close()
-        for client in self.clients:
+        for client in self.paired_clients:
             client.cleanup()
             client.join()
 

@@ -26,13 +26,13 @@ class PacketType(IntEnum):
 class MsgData:
     def __init__(
         self,
-        username: str | None = None,
+        sender: str | None = None,
         password: str | None = None,
         reciever: str | None = None,
         extra: str | None = None,
         fs: str | None = None,
     ):
-        self.username = username
+        self.sender = sender
         self.password = password
         self.reciever = reciever
         self.extra = extra
@@ -103,12 +103,12 @@ class Packet:
         return Packet(PacketType.InvalidUser, MsgData(extra=msg))
 
     @staticmethod
-    def login(username: str, password: str) -> Packet:
-        return Packet(PacketType.Login, MsgData(username=username, password=password))
+    def login(sender: str, password: str, reciever: str) -> Packet:
+        return Packet(PacketType.Login, MsgData(sender=sender, password=password, reciever=reciever))
 
     @staticmethod
-    def signin(username: str, password: str) -> Packet:
-        return Packet(PacketType.Signin, MsgData(username=username, password=password))
+    def signin(sender: str, password: str, reciever: str) -> Packet:
+        return Packet(PacketType.Signin, MsgData(sender=sender, password=password, reciever=reciever))
 
     def to_bytes(self) -> bytes:
         pkt = b""
@@ -142,29 +142,29 @@ def test():
         ("Quit Packet (cls method)", b"\x05{}\x00", Packet.quit()),
         (
             "Login Packet",
-            b'\x02{"username":"ad","password":"a"}\x00',
-            Packet(PacketType.Login, MsgData(username="ad", password="a")),
+            b'\x02{"sender":"ad","password":"a"}\x00',
+            Packet(PacketType.Login, MsgData(sender="ad", password="a")),
         ),
         (
             "Signin Packet",
-            b'\x03{"username":"ad","password":"a"}\x00',
-            Packet(PacketType.Signin, MsgData(username="ad", password="a")),
+            b'\x03{"sender":"ad","password":"a"}\x00',
+            Packet(PacketType.Signin, MsgData(sender="ad", password="a")),
         ),
         (
             "Login Packet (Unicode)",
-            b'\x02{"username":"goofy-\xf0\x9f\x98\x9c","password":"fancy"}\x00',
+            b'\x02{"sender":"goofy-\xf0\x9f\x98\x9c","password":"fancy"}\x00',
             Packet(
                 PacketType.Login,
-                MsgData(username=b"goofy-\xf0\x9f\x98\x9c".decode(), password="fancy"),
+                MsgData(sender=b"goofy-\xf0\x9f\x98\x9c".decode(), password="fancy"),
             ),
         ),
         (
             "Login Packet (with reciever)",
-            b'\x02{"username":"ad","password":"tik","reciever":"vdh"}\x00',
+            b'\x02{"sender":"ad","password":"tik","reciever":"vdh"}\x00',
             Packet(
                 PacketType.Login,
                 MsgData(
-                    username="ad",
+                    sender="ad",
                     password="tik",
                     reciever="vdh",
                 ),
