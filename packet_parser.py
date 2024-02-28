@@ -21,6 +21,7 @@ class PacketType(IntEnum):
     ShutDown = 6
     ValidUser = 7
     InvalidUser = 8
+    Paired = 9
 
 
 class MsgData:
@@ -110,6 +111,14 @@ class Packet:
     def signin(sender: str, password: str, reciever: str) -> Packet:
         return Packet(PacketType.Signin, MsgData(sender=sender, password=password, reciever=reciever))
 
+    @staticmethod
+    def paired() -> Packet:
+        return Packet(PacketType.Paired)
+
+    @staticmethod
+    def message(msg: str) -> Packet:
+        return Packet(PacketType.Msg, MsgData(extra=msg))
+
     def to_bytes(self) -> bytes:
         pkt = b""
         pkt += self.ty.to_bytes(1, "big")
@@ -192,6 +201,11 @@ def test():
             b'\x04{"fs":44100}\x00' + voice,
             Packet(PacketType.Voice, MsgData(fs=44100), voice),
         ),
+        (
+                "Client Paired",
+                b'\x09{}\x00',
+                Packet(PacketType.Paired)
+                )
     ]
 
     for kind, test, expect in cases:

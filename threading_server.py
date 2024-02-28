@@ -3,9 +3,10 @@ from __future__ import annotations
 from socket import socket, AF_INET, SOCK_STREAM
 from threading import Thread
 from typing import Callable, Literal
-from enum import IntEnum, auto
+from enum import IntEnum
 from packet_parser import Packet, PacketType, VOIP_PORT, NAddr
 from selectors import DefaultSelector, EVENT_READ, EVENT_WRITE
+from time import sleep
 
 DATABASE: dict[str, str] = {
     "ad": "a",
@@ -16,8 +17,8 @@ SERVER_NAME = "[Khazad-dûm]"
 
 
 class ClientState(IntEnum):
-    Conversing = auto()
-    Quitting = auto()
+    Conversing = 0
+    Quitting = 1
 
 
 class Client:
@@ -42,7 +43,7 @@ class Client:
         return Packet.parse(bts)
 
     def read_packets(self) -> list[Packet]:
-        pkts = [self.read_packet()]
+        pkts = []
         self.request.setblocking(False)
         try:
             while True:
@@ -69,7 +70,7 @@ class Client:
             case PacketType.Signin:
                 return self.signin(pkt)
             case _:
-                assert False
+                assert False, "Unexpected PacketType"
 
     def login(self, pkt: Packet) -> bool:
         if DATABASE.get(self.sender) == pkt.msg.password:
@@ -83,6 +84,9 @@ class Client:
             return self.valid()
         else:
             return self.invalid()
+
+    def paired(self) -> None:
+        self.send_packet(Packet.paired())
 
     def valid(self) -> Literal[True]:
         self.send_packet(
@@ -124,20 +128,25 @@ class PairedClientThread(Thread):
         )
 
     def run(self) -> None:
+        self.a.paired()
+        self.b.paired()
+
         alive = 2
         while alive:
             for key, event in self.selector.select():
                 (tx, rx) = key.data
                 client: Client = key.fileobj  # type: ignore
 
-                if event & EVENT_READ:
+                if event & EVENT_READ and client.state == ClientState.Conversing:
                     pkt = client.read_packet()
                     if pkt.ty == PacketType.Quit:
                         client.state = ClientState.Quitting
-                        continue
+                    rx.append(pkt)
                     rx.extend(client.read_packets())
 
                 if event & EVENT_WRITE:
+                    # FIXME: What the fuck?
+                    sleep(0.1)
                     if client.state == ClientState.Quitting:
                         client.send_packet(Packet.shutdown())
                         self.selector.unregister(client)
