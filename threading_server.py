@@ -3,10 +3,8 @@ from __future__ import annotations
 from socket import socket, AF_INET, SOCK_STREAM
 from threading import Thread
 from typing import Callable, Literal
-from enum import IntEnum
 from packet_parser import Packet, PacketType, VOIP_PORT, NAddr
 from selectors import DefaultSelector, EVENT_READ, EVENT_WRITE
-from time import sleep
 
 DATABASE: dict[str, str] = {
     "ad": "a",
@@ -16,18 +14,12 @@ DATABASE: dict[str, str] = {
 SERVER_NAME = "[Khazad-dûm]"
 
 
-class ClientState(IntEnum):
-    Conversing = 0
-    Quitting = 1
-
-
 class Client:
     def __init__(self, conn: socket, addr: NAddr) -> None:
         self.request = conn
         self.req_addr = addr
         self.sender = ""
         self.reciever = ""
-        self.state = ClientState.Conversing
 
     def fileno(self) -> int:
         return self.request.fileno()
@@ -42,18 +34,23 @@ class Client:
 
         return Packet.parse(bts)
 
-    def read_packets(self) -> list[Packet]:
-        pkts = []
+    def put_packets(self, pkts: list[Packet]):
+        # atleast block on one packet
+        pkts.append(self.read_packet())
         self.request.setblocking(False)
         try:
             while True:
                 pkts.append(self.read_packet())
         except BlockingIOError:
             self.request.setblocking(True)
-            return pkts
 
     def send_packet(self, pkt: Packet) -> None:
         self.request.sendall(pkt.to_bytes())
+
+    def take_packets(self, pkts: list[Packet]) -> None:
+        for pkt in pkts:
+            self.send_packet(pkt)
+        pkts.clear()
 
     def authenticate(self) -> bool:
         pkt = self.read_packet()
@@ -131,31 +128,25 @@ class PairedClientThread(Thread):
         self.a.paired()
         self.b.paired()
 
-        alive = 2
+        alive = True
         while alive:
             for key, event in self.selector.select():
                 (tx, rx) = key.data
                 client: Client = key.fileobj  # type: ignore
 
-                if event & EVENT_READ and client.state == ClientState.Conversing:
-                    pkt = client.read_packet()
+                if event & EVENT_READ:
+                    client.put_packets(rx)
+                    pkt = rx[0]
                     if pkt.ty == PacketType.Quit:
-                        client.state = ClientState.Quitting
-                    rx.append(pkt)
-                    rx.extend(client.read_packets())
+                        alive = False
+                        break
 
                 if event & EVENT_WRITE:
-                    # FIXME: What the fuck?
-                    sleep(0.1)
-                    if client.state == ClientState.Quitting:
-                        client.send_packet(Packet.shutdown())
-                        self.selector.unregister(client)
-                        alive -= 1
-                        continue
+                    client.take_packets(tx)
 
-                    for pkt in tx:
-                        client.send_packet(pkt)
-                    tx.clear()
+        self.a.send_packet(Packet.quit())
+        self.b.send_packet(Packet.quit())
+        self.on_close(self.id)
 
     def cleanup(self) -> None:
         self.a.cleanup()
@@ -186,7 +177,7 @@ class Server:
         if (reciever := self.get_potential_reciever(sender)) is not None:
             self.cid += 1
             paired_client = PairedClientThread(
-                sender, reciever, self.cid, self.on_auth_fail
+                sender, reciever, self.cid, self.on_close
             )
             paired_client.start()
             self.paired_clients.append(paired_client)
@@ -205,7 +196,7 @@ class Server:
             None,
         )
 
-    def on_auth_fail(self, cid: int) -> None:
+    def on_close(self, cid: int) -> None:
         client = next(
             (client for client in self.paired_clients if client.id == cid), None
         )
