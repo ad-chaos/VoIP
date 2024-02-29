@@ -18,7 +18,6 @@ class PacketType(IntEnum):
     Signin = 3
     Voice = 4
     Quit = 5
-    ShutDown = 6
     ValidUser = 7
     InvalidUser = 8
     Paired = 9
@@ -88,10 +87,6 @@ class Packet:
         return Packet(PacketType(ty), msg, audio)
 
     @staticmethod
-    def shutdown() -> Packet:
-        return Packet(PacketType.ShutDown)
-
-    @staticmethod
     def quit() -> Packet:
         return Packet(PacketType.Quit)
 
@@ -105,11 +100,17 @@ class Packet:
 
     @staticmethod
     def login(sender: str, password: str, reciever: str) -> Packet:
-        return Packet(PacketType.Login, MsgData(sender=sender, password=password, reciever=reciever))
+        return Packet(
+            PacketType.Login,
+            MsgData(sender=sender, password=password, reciever=reciever),
+        )
 
     @staticmethod
     def signin(sender: str, password: str, reciever: str) -> Packet:
-        return Packet(PacketType.Signin, MsgData(sender=sender, password=password, reciever=reciever))
+        return Packet(
+            PacketType.Signin,
+            MsgData(sender=sender, password=password, reciever=reciever),
+        )
 
     @staticmethod
     def paired() -> Packet:
@@ -201,11 +202,7 @@ def test():
             b'\x04{"fs":44100}\x00' + voice,
             Packet(PacketType.Voice, MsgData(fs=44100), voice),
         ),
-        (
-                "Client Paired",
-                b'\x09{}\x00',
-                Packet(PacketType.Paired)
-                )
+        ("Client Paired", b"\x09{}\x00", Packet(PacketType.Paired)),
     ]
 
     for kind, test, expect in cases:
@@ -223,11 +220,13 @@ def test():
         if rest == test and length == len(rest):
             print("✅")
         else:
-            print(f"""\
+            print(
+                f"""\
 ❌
 Expected: {test} (length: {len(test)})
 Got: {rest}      (length: {len(rest)})
-""")
+"""
+            )
 
         print()
 
