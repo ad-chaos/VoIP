@@ -52,7 +52,7 @@ class Client:
                 print("\r\033[KWaiting to Pair" + "."*(i%4 + 1), end="")
         self.socket.setblocking(True)
 
-        print("\nPairing successful!")
+        print(f"\nPairing successful! with {self.reciever}")
 
         for msg in [
             "First Message",
@@ -71,7 +71,7 @@ class Client:
         print("Trying to bloody quit")
         self.send_packet(Packet.quit())
         print("Waiting on quit confirmation")
-        while self.read_packet().ty != PacketType.ShutDown:
+        while self.read_packet().ty != PacketType.Quit:
             pass
         print("\nSuccessfully Exited call!")
 
