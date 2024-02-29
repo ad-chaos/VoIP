@@ -6,6 +6,7 @@ from selectors import DefaultSelector, EVENT_READ, EVENT_WRITE
 import sys
 from itertools import count
 from time import sleep
+from typing import Iterator
 
 
 class Client:
@@ -37,6 +38,34 @@ class Client:
         if pkt.ty == PacketType.InvalidUser:
             return
 
+        self.wait_for_reciever()
+
+        print(f"\nPairing successful! with {self.reciever}")
+
+        to_send: Iterator[Packet] = map(
+                Packet.message,
+                [
+                    "First Message",
+                    "Second Message",
+                    "Third Message",
+                    "Fourth Message",
+                    "Fifth Message",
+                ],
+            )
+
+        try:
+            while True:
+                sleep(0.2)
+                for ready, event in self.selector.select():
+                    if event & EVENT_READ:
+                        print(self.read_packet().msg.extra)
+
+                    if event & EVENT_WRITE:
+                        self.send_packet(next(to_send))
+        except StopIteration:
+            self.quit()
+
+    def wait_for_reciever(self):
         self.socket.setblocking(False)
         for i in count():
             sleep(0.5)
@@ -49,26 +78,11 @@ class Client:
                 else:
                     break
             except BlockingIOError:
-                print("\r\033[KWaiting to Pair" + "."*(i%4 + 1), end="")
+                print("\r\033[KWaiting to Pair" + "." * (i % 4 + 1), end="")
         self.socket.setblocking(True)
 
-        print(f"\nPairing successful! with {self.reciever}")
-
-        for msg in [
-            "First Message",
-            "Second Message",
-            "Third Message",
-            "Fourth Message",
-        ]:
-            self.send_packet(Packet.message(f"[{self.username}] {msg}"))
-
-        for _ in range(4):
-            print(self.read_packet().msg.extra)
-
-        self.quit()
-
     def quit(self):
-        print("Trying to bloody quit")
+        print("Quitting!")
         self.send_packet(Packet.quit())
         print("Waiting on quit confirmation")
         while self.read_packet().ty != PacketType.Quit:
