@@ -19,6 +19,7 @@ class Client:
         self.password = password
         self.reciever = reciever
         self.auth_ty = auth_ty
+        self.conversing = True
         self.selector = DefaultSelector()
         self.selector.register(self, EVENT_WRITE | EVENT_READ)
 
@@ -43,22 +44,28 @@ class Client:
         print(f"\nPairing successful! with {self.reciever}")
 
         to_send: Iterator[Packet] = map(
-                Packet.message,
-                [
-                    "First Message",
-                    "Second Message",
-                    "Third Message",
-                    "Fourth Message",
-                    "Fifth Message",
-                ],
-            )
+            Packet.message,
+            [
+                "First Message",
+                "Second Message",
+                "Third Message",
+                "Fourth Message",
+                "Fifth Message",
+            ],
+        )
 
         try:
-            while True:
+            self.conversing = True
+            while self.conversing:
                 sleep(0.2)
                 for ready, event in self.selector.select():
                     if event & EVENT_READ:
-                        print(self.read_packet().msg.extra)
+                        pkt = self.read_packet()
+                        if pkt.ty == PacketType.Quit:
+                            self.conversing = False
+                            self.quit()
+                            break
+                        print(pkt.msg.extra)
 
                     if event & EVENT_WRITE:
                         self.send_packet(next(to_send))
@@ -78,14 +85,13 @@ class Client:
                 else:
                     break
             except BlockingIOError:
-                print("\r\033[KWaiting to Pair" + "." * (i % 4 + 1), end="")
+                print("\r\033[KWaiting to Pair" + "." * (i % 4 + 1), end="")  # ]
         self.socket.setblocking(True)
 
     def quit(self):
         print("Quitting!")
         self.send_packet(Packet.quit())
-        print("Waiting on quit confirmation")
-        while self.read_packet().ty != PacketType.Quit:
+        while self.conversing and self.read_packet().ty != PacketType.Quit:
             pass
         print("\nSuccessfully Exited call!")
 
@@ -123,11 +129,13 @@ class Client:
 # auth_ty = input("[L]ogin/[S]ignup? ")
 
 if sys.argv[1] == "a":
+    print("I'm ad")
     username = "ad"
     password = "a"
     reciever = "sad"
     auth_ty = "L"
 else:
+    print("I'm sad")
     username = "sad"
     password = "s"
     reciever = "ad"

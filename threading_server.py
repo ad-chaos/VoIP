@@ -20,6 +20,7 @@ class Client:
         self.req_addr = addr
         self.sender = ""
         self.reciever = ""
+        self.quitting = False
 
     def fileno(self) -> int:
         return self.request.fileno()
@@ -35,12 +36,13 @@ class Client:
         return Packet.parse(bts)
 
     def put_packets(self, pkts: list[Packet]):
-        # atleast block on one packet
-        pkts.append(self.read_packet())
         self.request.setblocking(False)
         try:
-            while True:
-                pkts.append(self.read_packet())
+            while not self.quitting:
+                pkt = self.read_packet()
+                if pkt.ty == PacketType.Quit:
+                    self.quitting = True
+                pkts.append(pkt)
         except BlockingIOError:
             self.request.setblocking(True)
 
@@ -136,16 +138,18 @@ class PairedClientThread(Thread):
 
                 if event & EVENT_READ:
                     client.put_packets(rx)
-                    pkt = rx[0]
-                    if pkt.ty == PacketType.Quit:
+                    if client.quitting:
+                        client.send_packet(Packet.quit())
+                        self.b = self.a if client is self.b else self.b
                         alive = False
                         break
 
                 if event & EVENT_WRITE:
                     client.take_packets(tx)
 
-        self.a.send_packet(Packet.quit())
         self.b.send_packet(Packet.quit())
+        while self.b.read_packet().ty != PacketType.Quit:
+            pass
         self.on_close(self.id)
 
     def cleanup(self) -> None:

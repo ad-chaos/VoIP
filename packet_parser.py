@@ -125,6 +125,7 @@ class Packet:
         pkt += self.ty.to_bytes(1, "big")
         pkt += self.msg.to_bytes()
         pkt += self.audio
+        assert len(pkt), f"{self} encodes to a zero length packet"
         return len(pkt).to_bytes(4, "big") + pkt
 
     def __eq__(self, other: Packet) -> bool:  # type: ignore[override]
