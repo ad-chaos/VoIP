@@ -34,18 +34,6 @@ if __name__ == "__main__":
         password = "s"
         reciever = "ad"
 
-    to_send: Iterator[Packet] = map(
-        Packet.message,
-        [
-            "First Message",
-            "Second Message",
-            "Third Message",
-            "Fourth Message",
-            "Fifth Message",
-        ]
-        * 5,
-    )
-
     producer: Iterator[Packet] = map(
         Packet.message,
         [
