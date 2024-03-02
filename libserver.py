@@ -3,7 +3,7 @@ from __future__ import annotations
 from socket import socket, AF_INET, SOCK_STREAM
 from threading import Thread
 from typing import Callable, Literal
-from packet_parser import Packet, PacketType, VOIP_PORT, NAddr
+from packet_parser import Packet, PacketType, NAddr
 from selectors import DefaultSelector, EVENT_READ, EVENT_WRITE
 
 DATABASE: dict[str, str] = {
@@ -35,7 +35,7 @@ class Client:
 
         return Packet.parse(bts)
 
-    def put_packets(self, pkts: list[Packet]):
+    def put_packets(self, pkts: list[Packet]) -> None:
         self.request.setblocking(False)
         try:
             while not self.quitting:
@@ -139,16 +139,18 @@ class PairedClientThread(Thread):
                 if event & EVENT_READ:
                     client.put_packets(rx)
                     if client.quitting:
-                        client.send_packet(Packet.quit())
-                        self.b = self.a if client is self.b else self.b
+                        self.quit(client)
                         alive = False
                         break
 
                 if event & EVENT_WRITE:
                     client.take_packets(tx)
 
-        self.b.send_packet(Packet.quit())
-        while self.b.read_packet().ty != PacketType.Quit:
+    def quit(self, client: Client) -> None:
+        client.send_packet(Packet.quit())
+        other_client = self.a if client is self.b else self.b
+        other_client.send_packet(Packet.quit())
+        while other_client.read_packet().ty != PacketType.Quit:
             pass
         self.on_close(self.id)
 
@@ -223,9 +225,3 @@ class Server:
         for client in self.paired_clients:
             client.cleanup()
             client.join()
-
-
-if __name__ == "__main__":
-    with Server(("localhost", VOIP_PORT)) as server:
-        print(f"Server ready on port: {VOIP_PORT}")
-        server.serve_forever()
