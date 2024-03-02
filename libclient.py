@@ -8,10 +8,6 @@ from time import sleep
 from typing import Iterator
 
 
-class QuitException(KeyboardInterrupt, StopIteration):
-    pass
-
-
 class Client:
     def __init__(
         self, username: str, password: str, reciever: str, addr: NAddr
@@ -65,16 +61,7 @@ class Client:
                 print("\r\033[KWaiting to Pair" + "." * (i % 4 + 1), end="")  # ]
         self.socket.setblocking(True)
 
-    def drain_recieve_buffer(self) -> None:
-        self.socket.setblocking(False)
-        try:
-            while True:
-                self.handle_packet(self.read_packet())
-        except BlockingIOError:
-            self.socket.setblocking(True)
-
     def quit(self) -> None:
-        self.drain_recieve_buffer()
         print("Quitting!")
         self.send_packet(Packet.quit())
         while self.conversing:
