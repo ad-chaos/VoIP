@@ -6,7 +6,7 @@ from typing import Iterator
 
 class VoIPClient(Client):
     def handle_packet(self, pkt: Packet | None) -> None:
-        if pkt:
+        if pkt and pkt.ty != PacketType.NoPacket:
             print(pkt.msg.extra)
 
 

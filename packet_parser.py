@@ -18,6 +18,7 @@ class PacketType(IntEnum):
     Signin = 3
     Voice = 4
     Quit = 5
+    NoPacket = 6
     ValidUser = 7
     InvalidUser = 8
     Paired = 9
@@ -30,7 +31,7 @@ class MsgData:
         password: str | None = None,
         reciever: str | None = None,
         extra: str | None = None,
-        fs: str | None = None,
+        fs: int | None = None,
     ):
         self.sender = sender
         self.password = password
@@ -120,6 +121,10 @@ class Packet:
     def message(msg: str) -> Packet:
         return Packet(PacketType.Msg, MsgData(extra=msg))
 
+    @staticmethod
+    def none() -> Packet:
+        return Packet(PacketType.NoPacket)
+
     def to_bytes(self) -> bytes:
         pkt = b""
         pkt += self.ty.to_bytes(1, "big")
@@ -138,8 +143,27 @@ class Packet:
     def __repr__(self) -> str:
         return f"Packet(ty={self.ty!r}, msg={self.msg!r}, audio={self.audio!r})"
 
+def check_eq(what, expect, actual) -> None:
+    print(what, end=" ")
+    if expect == actual:
+        print("✅")
+    else:
+        print("❌", "\nExpected:", expect, "\nGot:", actual, end="\n\n")
 
-def test():
+def test(kind: str, expect_bytes: bytes, expect_parsed: Packet) -> None:
+    print(kind)
+
+    parsed = Packet.parse(expect_bytes)
+    check_eq("[Parse]", expect_parsed, parsed)
+
+    bts = parsed.to_bytes()
+    _, packet_bytes = int.from_bytes(bts[:4], "big"), bts[4:]
+    check_eq("[Bytes]", expect_bytes, packet_bytes)
+
+    print()
+
+
+if __name__ == "__main__":
     from random import randbytes
 
     voice = randbytes(32)
@@ -204,33 +228,9 @@ def test():
             Packet(PacketType.Voice, MsgData(fs=44100), voice),
         ),
         ("Client Paired", b"\x09{}\x00", Packet(PacketType.Paired)),
+        ("NoPacket", b"\x06{}\x00", Packet(PacketType.NoPacket)),
     ]
 
-    for kind, test, expect in cases:
-        parsed = Packet.parse(test)
-        print(kind)
-        print(end="[Parse]:")
-        if parsed == expect:
-            print(end="✅ ")
-        else:
-            print("❌", "\nExpected:", expect, "\nGot:", parsed, end="\n\n")
 
-        print(end="[Bytes]:")
-        bts = parsed.to_bytes()
-        length, rest = int.from_bytes(bts[:4], "big"), bts[4:]
-        if rest == test and length == len(rest):
-            print("✅")
-        else:
-            print(
-                f"""\
-❌
-Expected: {test} (length: {len(test)})
-Got: {rest}      (length: {len(rest)})
-"""
-            )
-
-        print()
-
-
-if __name__ == "__main__":
-    test()
+    for kind, expect_bytes, expect_parsed in cases:
+        test(kind, expect_bytes, expect_parsed)

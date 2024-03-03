@@ -2,11 +2,8 @@ from __future__ import annotations
 
 from socket import socket, AF_INET, SOCK_STREAM
 from packet_parser import Packet, PacketType, NAddr
-from selectors import DefaultSelector, EVENT_READ, EVENT_WRITE
 from itertools import count
-from time import sleep
 from typing import Iterator
-
 
 class Client:
     def __init__(
@@ -14,41 +11,46 @@ class Client:
     ) -> None:
         self.socket = socket(AF_INET, SOCK_STREAM)
         self.socket.connect(addr)
+        self.socket.settimeout(0.5)
         self.username = username
         self.password = password
         self.reciever = reciever
-        self.conversing = True
-        self.selector = DefaultSelector()
-        self.selector.register(self, EVENT_WRITE | EVENT_READ)
 
     def fileno(self) -> int:
         return self.socket.fileno()
 
     def chat(self, consumer: Iterator[Packet]) -> None:
         try:
-            self.conversing = True
-            while self.conversing:
-                for ready, event in self.selector.select():
-                    if event & EVENT_READ:
-                        pkt = self.read_packet()
-                        if pkt is None or pkt.ty == PacketType.Quit:
-                            self.conversing = False
-                            self.quit()
-                            break
-                        self.handle_packet(pkt)
-
-                    if event & EVENT_WRITE:
-                        self.send_packet(next(consumer))
+            has_recv = True
+            while True:
+                if has_recv:
+                    self.try_send(next(consumer))
+                maybe_pkt = self.try_read()
+                if maybe_pkt is None or maybe_pkt.ty == PacketType.Quit:
+                    self.quit(True)
+                    break
+                has_recv = maybe_pkt.ty != PacketType.NoPacket
+                self.handle_packet(maybe_pkt)
         except (KeyboardInterrupt, StopIteration):
-            self.quit()
+            self.quit(False)
+
+    def try_read(self) -> Packet | None:
+        try:
+            return self.read_packet()
+        except TimeoutError:
+            return Packet.none()
+
+    def try_send(self, pkt) -> None:
+        try:
+            self.send_packet(pkt)
+        except TimeoutError:
+            pass
 
     def handle_packet(self, pkt: Packet | None) -> None:
         raise NotImplementedError
 
     def wait_for_reciever(self) -> None:
-        self.socket.setblocking(False)
         for i in count():
-            sleep(0.5)
             try:
                 # We wait for a packet that let's us know we've been paired
                 pkt = self.read_packet()
@@ -57,14 +59,13 @@ class Client:
                     return
                 else:
                     break
-            except BlockingIOError:
+            except TimeoutError:
                 print("\r\033[KWaiting to Pair" + "." * (i % 4 + 1), end="")  # ]
-        self.socket.setblocking(True)
 
-    def quit(self) -> None:
+    def quit(self, await_confirm: bool) -> None:
         print("Quitting!")
         self.send_packet(Packet.quit())
-        while self.conversing:
+        while await_confirm:
             pkt = self.read_packet()
             if pkt is None or pkt.ty == PacketType.Quit:
                 break
@@ -98,4 +99,3 @@ class Client:
 
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:
         self.socket.close()
-        self.selector.close()
