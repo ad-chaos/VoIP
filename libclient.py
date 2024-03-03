@@ -5,9 +5,15 @@ from packet_parser import Packet, PacketType, NAddr
 from itertools import count
 from typing import Iterator
 
+
 class Client:
     def __init__(
-        self, username: str, password: str, reciever: str, addr: NAddr
+        self,
+        username: str,
+        password: str,
+        reciever: str,
+        producer: Iterator[Packet],
+        addr: NAddr,
     ) -> None:
         self.socket = socket(AF_INET, SOCK_STREAM)
         self.socket.connect(addr)
@@ -15,16 +21,17 @@ class Client:
         self.username = username
         self.password = password
         self.reciever = reciever
+        self.voice_producer = producer
 
     def fileno(self) -> int:
         return self.socket.fileno()
 
-    def chat(self, consumer: Iterator[Packet]) -> None:
+    def chat(self) -> None:
         try:
             has_recv = True
             while True:
                 if has_recv:
-                    self.try_send(next(consumer))
+                    self.try_send(next(self.voice_producer))
                 maybe_pkt = self.try_read()
                 if maybe_pkt is None or maybe_pkt.ty == PacketType.Quit:
                     self.quit(True)

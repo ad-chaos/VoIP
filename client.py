@@ -1,13 +1,15 @@
 from packet_parser import VOIP_PORT, PacketType, Packet
 from libclient import Client
-from typing import Iterator
+from voice_channel import Producer
 import argparse
 
 
 class VoIPClient(Client):
     def handle_packet(self, pkt: Packet | None) -> None:
-        if pkt and pkt.ty != PacketType.NoPacket:
-            print(pkt.msg.extra)
+        if pkt is None or pkt.ty == PacketType.NoPacket:
+            return
+
+        print(pkt.msg.extra)
 
 
 def main() -> None:
@@ -49,30 +51,18 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    producer: Iterator[Packet] = map(
-        Packet.message,
-        [
-            "First Message",
-            "Second Message",
-            "Third Message",
-            "Fourth Message",
-            "Fifth Message",
-        ]
-        * 5,
-    )
-
     with VoIPClient(
-        args.username, args.password, args.reciever, (args.ip, VOIP_PORT)
+        args.username, args.password, args.reciever, Producer(), (args.ip, VOIP_PORT)
     ) as c:
-        print("Login: ", args.login)
-        print("Sigin: ", args.sigin)
         status = c.login() if args.login else c.signin()
-        if status is None or status.ty == PacketType.InvalidUser:
-            print(status)
+        if status is None:
+            return
+        print(status.msg.extra)
+        if status.ty == PacketType.InvalidUser:
             return
         c.wait_for_reciever()
         print(f"\nPairing successful with {c.reciever}!")
-        c.chat(producer)
+        c.chat()
 
 
 if __name__ == "__main__":
