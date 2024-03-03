@@ -4,6 +4,7 @@ from socket import socket, AF_INET, SOCK_STREAM
 from packet_parser import Packet, PacketType, NAddr
 from itertools import count
 from typing import Iterator
+from ssl import create_default_context, Purpose
 
 
 class Client:
@@ -15,7 +16,10 @@ class Client:
         producer: Iterator[Packet],
         addr: NAddr,
     ) -> None:
-        self.socket = socket(AF_INET, SOCK_STREAM)
+        s = socket(AF_INET, SOCK_STREAM)
+        ssl_ctx = create_default_context(Purpose.SERVER_AUTH)
+        ssl_ctx.load_verify_locations(cafile="./ca.pem")
+        self.socket = ssl_ctx.wrap_socket(s, server_hostname="voip.com")
         self.socket.connect(addr)
         self.socket.settimeout(0.5)
         self.username = username

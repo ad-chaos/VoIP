@@ -5,6 +5,7 @@ from threading import Thread
 from typing import Callable, Literal
 from packet_parser import Packet, PacketType, NAddr
 from selectors import DefaultSelector, EVENT_READ, EVENT_WRITE
+from ssl import create_default_context, Purpose, SSLWantReadError
 
 DATABASE: dict[str, str] = {
     "ad": "a",
@@ -43,7 +44,7 @@ class Client:
                 if pkt.ty == PacketType.Quit:
                     self.quitting = True
                 pkts.append(pkt)
-        except BlockingIOError:
+        except SSLWantReadError:
             self.request.setblocking(True)
 
     def send_packet(self, pkt: Packet) -> None:
@@ -164,7 +165,11 @@ class Server:
         server_sock = socket(AF_INET, SOCK_STREAM)
         server_sock.bind(addr)
         server_sock.listen()
-        self.socket = server_sock
+
+        ssl_ctx = create_default_context(Purpose.CLIENT_AUTH)
+        ssl_ctx.load_cert_chain(certfile="./cert.pem", keyfile="./cert-key.pem")
+
+        self.socket = ssl_ctx.wrap_socket(server_sock, server_side=True)
 
         self.paired_clients: list[PairedClientThread] = []
         self.waiting_clients: list[Client] = []
