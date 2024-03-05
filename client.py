@@ -12,7 +12,7 @@ class VoIPClient(Client):
 
         match pkt.ty:
             case PacketType.Msg:
-                print(pkt.msg.extra)
+                print(pkt.msg.extra, pkt.audio)
             case PacketType.Voice:
                 self.voice_producer.stream.write(loads(pkt.audio))
 

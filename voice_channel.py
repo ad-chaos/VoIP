@@ -25,7 +25,7 @@ class Producer:
             samplerate=44100,
             blocksize=1 << 15,
             channels=(1, 1),
-            callback=None,
+            callback=callback,
             dtype=np.int32,
         )
         self.packet_queue: SimpleQueue[Packet] = SimpleQueue()

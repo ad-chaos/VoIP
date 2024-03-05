@@ -147,12 +147,14 @@ class Packet:
     def __repr__(self) -> str:
         return f"Packet(ty={self.ty!r}, msg={self.msg!r}, audio={self.audio!r})"
 
+
 def check_eq(what, expect, actual) -> None:
     print(what, end=" ")
     if expect == actual:
         print("✅")
     else:
         print("❌", "\nExpected:", expect, "\nGot:", actual, end="\n\n")
+
 
 def test(kind: str, expect_bytes: bytes, expect_parsed: Packet) -> None:
     print(kind)
@@ -234,7 +236,6 @@ if __name__ == "__main__":
         ("Client Paired", b"\x09{}\x00", Packet(PacketType.Paired)),
         ("NoPacket", b"\x06{}\x00", Packet(PacketType.NoPacket)),
     ]
-
 
     for kind, expect_bytes, expect_parsed in cases:
         test(kind, expect_bytes, expect_parsed)
