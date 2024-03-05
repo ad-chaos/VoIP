@@ -43,7 +43,7 @@ def main() -> None:
     )
     grp.add_argument(
         "-s",
-        "--sigin",
+        "--signin",
         type=bool,
         action=argparse.BooleanOptionalAction,
         default=False,
