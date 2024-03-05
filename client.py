@@ -2,6 +2,7 @@ from packet_parser import VOIP_PORT, PacketType, Packet
 from libclient import Client
 from voice_channel import Producer
 import argparse
+from pickle import loads
 
 
 class VoIPClient(Client):
@@ -9,7 +10,11 @@ class VoIPClient(Client):
         if pkt is None or pkt.ty == PacketType.NoPacket:
             return
 
-        print(pkt.msg.extra)
+        match pkt.ty:
+            case PacketType.Msg:
+                print(pkt.msg.extra)
+            case PacketType.Voice:
+                self.voice_producer.stream.write(loads(pkt.audio))
 
 
 def main() -> None:

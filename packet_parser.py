@@ -125,6 +125,10 @@ class Packet:
     def none() -> Packet:
         return Packet(PacketType.NoPacket)
 
+    @staticmethod
+    def voice(audio: bytes) -> Packet:
+        return Packet(PacketType.Voice, audio=audio)
+
     def to_bytes(self) -> bytes:
         pkt = b""
         pkt += self.ty.to_bytes(1, "big")
@@ -166,7 +170,7 @@ def test(kind: str, expect_bytes: bytes, expect_parsed: Packet) -> None:
 if __name__ == "__main__":
     from random import randbytes
 
-    voice = randbytes(32)
+    voice = randbytes(1024)
     cases = [
         (
             "Message Packet",

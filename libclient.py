@@ -3,7 +3,7 @@ from __future__ import annotations
 from socket import socket, AF_INET, SOCK_STREAM
 from packet_parser import Packet, PacketType, NAddr
 from itertools import count
-from typing import Iterator
+from voice_channel import Producer
 from ssl import create_default_context, Purpose
 
 
@@ -13,7 +13,7 @@ class Client:
         username: str,
         password: str,
         reciever: str,
-        producer: Iterator[Packet],
+        producer: Producer,
         addr: NAddr,
     ) -> None:
         s = socket(AF_INET, SOCK_STREAM)
@@ -106,7 +106,10 @@ class Client:
         return self.read_packet()
 
     def __enter__(self) -> Client:
+        self.voice_producer.start()
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:
         self.socket.close()
+        self.voice_producer.stop()
+        self.voice_producer.close()
