@@ -35,9 +35,10 @@ class Client:
         return Packet.parse(bts)
 
     def send_packet(self, pkt: Packet) -> None:
-        bts = pkt.to_bytes()
-        print("Bytes to send are: ", bts)
-        self.request.sendall(bts)
+        try:
+            self.request.sendall(pkt.to_bytes())
+        except: # noqa: E722
+            print("Client exited")
 
     def authenticate(self) -> bool:
         pkt = self.read_packet()
@@ -110,21 +111,19 @@ class PairedClientThread(Thread):
         while True:
             a_pkt = self.a.read_packet()
             if a_pkt.ty == PacketType.Quit:
-                self.quit(self.a)
+                self.quit(self.b)
                 break
 
             b_pkt = self.b.read_packet()
             if b_pkt.ty == PacketType.Quit:
-                self.quit(self.b)
+                self.quit(self.a)
                 break
 
             self.b.send_packet(a_pkt)
             self.a.send_packet(b_pkt)
 
-    def quit(self, client: Client) -> None:
-        other_client = self.a if client is self.b else self.b
+    def quit(self, other_client: Client) -> None:
         other_client.send_packet(Packet.quit())
-        client.send_packet(Packet.quit())
         self.on_close(self.id)
 
     def cleanup(self) -> None:
