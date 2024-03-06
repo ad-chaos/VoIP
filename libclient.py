@@ -20,6 +20,7 @@ class Client:
         ssl_ctx = create_default_context(Purpose.SERVER_AUTH)
         ssl_ctx.load_verify_locations(cafile="./ca.pem")
         self.socket = ssl_ctx.wrap_socket(s, server_hostname="voip.com")
+        self.socket.connect(addr)
         self.username = username
         self.password = password
         self.reciever = reciever
