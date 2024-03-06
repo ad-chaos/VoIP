@@ -17,10 +17,8 @@ SERVER_NAME = "[Khazad-dûm]"
 class Client:
     def __init__(self, conn: socket, addr: NAddr) -> None:
         self.request = conn
-        self.req_addr = addr
         self.sender = ""
         self.reciever = ""
-        self.quitting = False
 
     def read_packet(self) -> Packet:
         size = int.from_bytes(self.request.recv(4), "big")
