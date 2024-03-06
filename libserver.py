@@ -4,8 +4,7 @@ from socket import socket, AF_INET, SOCK_STREAM
 from threading import Thread
 from typing import Callable, Literal
 from packet_parser import Packet, PacketType, NAddr
-from selectors import DefaultSelector, EVENT_READ, EVENT_WRITE
-from ssl import create_default_context, Purpose, SSLWantReadError
+from ssl import create_default_context, Purpose
 
 DATABASE: dict[str, str] = {
     "ad": "a",
@@ -23,9 +22,6 @@ class Client:
         self.reciever = ""
         self.quitting = False
 
-    def fileno(self) -> int:
-        return self.request.fileno()
-
     def read_packet(self) -> Packet:
         size = int.from_bytes(self.request.recv(4), "big")
         bts = b""
@@ -38,25 +34,8 @@ class Client:
 
         return Packet.parse(bts)
 
-    def put_packets(self, pkts: list[Packet]) -> None:
-        self.request.setblocking(False)
-        try:
-            while not self.quitting:
-                pkt = self.read_packet()
-                if pkt.ty == PacketType.Quit:
-                    self.quitting = True
-                    break
-                pkts.append(pkt)
-        except SSLWantReadError:
-            self.request.setblocking(True)
-
     def send_packet(self, pkt: Packet) -> None:
         self.request.sendall(pkt.to_bytes())
-
-    def take_packets(self, pkts: list[Packet]) -> None:
-        for pkt in pkts:
-            self.send_packet(pkt)
-        pkts.clear()
 
     def authenticate(self) -> bool:
         pkt = self.read_packet()
@@ -122,39 +101,22 @@ class PairedClientThread(Thread):
         self.a_sent: list[Packet] = []
         self.b_sent: list[Packet] = []
 
-        self.selector = DefaultSelector()
-        self.selector.register(
-            self.a, EVENT_READ | EVENT_WRITE, (self.a_sent, self.b_sent)
-        )
-        self.selector.register(
-            self.b, EVENT_READ | EVENT_WRITE, (self.b_sent, self.a_sent)
-        )
-
     def run(self) -> None:
         self.a.paired()
         self.b.paired()
 
         alive = True
         while alive:
-            for key, event in self.selector.select():
-                (tx, rx) = key.data
-                client: Client = key.fileobj  # type: ignore
-
-                if event & EVENT_READ:
-                    client.put_packets(rx)
-                    if client.quitting:
-                        self.quit(client)
-                        alive = False
-                        break
-
-                if event & EVENT_WRITE:
-                    client.take_packets(tx)
+            self.b.send_packet(self.a.read_packet())
+            self.a.send_packet(self.b.read_packet())
 
     def quit(self, client: Client) -> None:
         client.send_packet(Packet.quit())
         other_client = self.a if client is self.b else self.b
         other_client.send_packet(Packet.quit())
-        while other_client.read_packet().ty != PacketType.Quit:
+        while (pkt := other_client.read_packet()) and (
+            pkt.ty != PacketType.Quit or pkt.ty != PacketType.NoPacket
+        ):
             pass
         self.on_close(self.id)
 
