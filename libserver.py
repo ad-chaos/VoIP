@@ -105,10 +105,19 @@ class PairedClientThread(Thread):
         self.a.paired()
         self.b.paired()
 
-        alive = True
-        while alive:
-            self.b.send_packet(self.a.read_packet())
-            self.a.send_packet(self.b.read_packet())
+        while True:
+            a_pkt = self.a.read_packet()
+            if a_pkt.ty == PacketType.Quit:
+                self.quit(self.a)
+                break
+
+            b_pkt = self.b.read_packet()
+            if b_pkt.ty == PacketType.Quit:
+                self.quit(self.b)
+                break
+
+            self.b.send_packet(a_pkt)
+            self.a.send_packet(b_pkt)
 
     def quit(self, client: Client) -> None:
         client.send_packet(Packet.quit())
