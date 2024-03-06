@@ -34,7 +34,7 @@ class Client:
             while True:
                 self.send_packet(next(self.voice_producer))
                 maybe_pkt = self.read_packet()
-                if maybe_pkt is None or maybe_pkt.ty == PacketType.Quit:
+                if maybe_pkt.ty == PacketType.NoPacket or maybe_pkt.ty == PacketType.Quit:
                     self.quit(True)
                     break
                 self.handle_packet(maybe_pkt)
@@ -50,7 +50,7 @@ class Client:
             try:
                 # We wait for a packet that let's us know we've been paired
                 pkt = self.read_packet()
-                if pkt is None or pkt.ty != PacketType.Paired:
+                if pkt.ty != PacketType.Paired:
                     print("Expected a Paired Packet")
                     return
                 else:
@@ -64,17 +64,17 @@ class Client:
         self.send_packet(Packet.quit())
         while await_confirm:
             pkt = self.read_packet()
-            if pkt is None or pkt.ty == PacketType.Quit:
+            if pkt.ty == PacketType.NoPacket or pkt.ty == PacketType.Quit:
                 break
         print("\nSuccessfully Exited call!")
 
     def send_packet(self, pkt: Packet) -> None:
         self.socket.sendall(pkt.to_bytes())
 
-    def read_packet(self) -> Packet | None:
+    def read_packet(self) -> Packet:
         size = int.from_bytes(self.socket.recv(4), "big")
         if size == 0:
-            return None
+            return Packet.none()
         bts = b""
         while size > 0:
             rbts = self.socket.recv(size)

@@ -35,7 +35,8 @@ class Client:
         return Packet.parse(bts)
 
     def send_packet(self, pkt: Packet) -> None:
-        self.request.sendall(pkt.to_bytes())
+        bts = pkt.to_bytes()
+        self.request.sendall(bts)
 
     def authenticate(self) -> bool:
         pkt = self.read_packet()
