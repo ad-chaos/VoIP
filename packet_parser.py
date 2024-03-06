@@ -5,7 +5,7 @@ import json
 # The Packet Format:
 #
 # 1 byte packet id
-# msg(optional): key:value pairs separated by comma terminated by a NUL character
+# msg(optional): json encoded key:value
 # audio(optional): the rest of it is audio
 
 VOIP_PORT = 8096

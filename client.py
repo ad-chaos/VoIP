@@ -15,7 +15,6 @@ class VoIPClient(Client):
                 print(pkt.msg.extra, pkt.audio)
             case PacketType.Voice:
                 self.voice_producer.audio_queue.append(loads(pkt.audio))
-                # self.voice_producer.stream.write(loads(pkt.audio))
 
 
 def main() -> None:
