@@ -45,6 +45,7 @@ class Client:
         raise NotImplementedError
 
     def wait_for_reciever(self) -> None:
+        self.socket.setblocking(False)
         for i in count():
             try:
                 # We wait for a packet that let's us know we've been paired
@@ -54,8 +55,9 @@ class Client:
                     return
                 else:
                     break
-            except TimeoutError:
+            except BlockingIOError:
                 print("\r\033[KWaiting to Pair" + "." * (i % 4 + 1), end="")  # ]
+        self.socket.setblocking(True)
 
     def quit(self, await_confirm: bool) -> None:
         print("Quitting!")

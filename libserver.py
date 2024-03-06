@@ -26,9 +26,11 @@ class Client:
     def fileno(self) -> int:
         return self.request.fileno()
 
-    def read_packet(self) -> Packet:
+    def read_packet(self) -> Packet | None:
         size = int.from_bytes(self.request.recv(4), "big")
         bts = b""
+        if size == 0:
+            return None
         while size > 0:
             rbts = self.request.recv(size)
             size -= len(rbts)
@@ -41,8 +43,9 @@ class Client:
         try:
             while not self.quitting:
                 pkt = self.read_packet()
-                if pkt.ty == PacketType.Quit:
+                if pkt is None or pkt.ty == PacketType.Quit:
                     self.quitting = True
+                    break
                 pkts.append(pkt)
         except SSLWantReadError:
             self.request.setblocking(True)
@@ -58,7 +61,7 @@ class Client:
     def authenticate(self) -> bool:
         pkt = self.read_packet()
 
-        if not (pkt.msg.sender and pkt.msg.reciever):
+        if pkt is None or not (pkt.msg.sender and pkt.msg.reciever):
             return self.invalid()
 
         self.sender = pkt.msg.sender
