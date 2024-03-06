@@ -20,8 +20,6 @@ class Client:
         ssl_ctx = create_default_context(Purpose.SERVER_AUTH)
         ssl_ctx.load_verify_locations(cafile="./ca.pem")
         self.socket = ssl_ctx.wrap_socket(s, server_hostname="voip.com")
-        self.socket.connect(addr)
-        self.socket.settimeout(0.5)
         self.username = username
         self.password = password
         self.reciever = reciever
@@ -32,30 +30,15 @@ class Client:
 
     def chat(self) -> None:
         try:
-            has_recv = True
             while True:
-                if has_recv:
-                    self.try_send(next(self.voice_producer))
-                maybe_pkt = self.try_read()
+                self.send_packet(next(self.voice_producer))
+                maybe_pkt = self.read_packet()
                 if maybe_pkt is None or maybe_pkt.ty == PacketType.Quit:
                     self.quit(True)
                     break
-                has_recv = maybe_pkt.ty != PacketType.NoPacket
                 self.handle_packet(maybe_pkt)
         except (KeyboardInterrupt, StopIteration):
             self.quit(False)
-
-    def try_read(self) -> Packet | None:
-        try:
-            return self.read_packet()
-        except TimeoutError:
-            return Packet.none()
-
-    def try_send(self, pkt) -> None:
-        try:
-            self.send_packet(pkt)
-        except TimeoutError:
-            pass
 
     def handle_packet(self, pkt: Packet | None) -> None:
         raise NotImplementedError

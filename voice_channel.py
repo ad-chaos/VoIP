@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 from queue import SimpleQueue
 from pickle import dumps
 import numpy as np
+from collections import deque
 
 if TYPE_CHECKING:
     from sounddevice import CData, CallbackFlags
@@ -20,6 +21,10 @@ class Producer:
             status: CallbackFlags,
         ) -> None:
             self.packet_queue.put(Packet.voice(dumps(indata)))
+            if self.audio_queue:
+                outdata[:] = self.audio_queue.popleft()
+            else:
+                outdata.fill(0)
 
         self.stream = Stream(
             samplerate=44100,
@@ -29,6 +34,7 @@ class Producer:
             dtype=np.int32,
         )
         self.packet_queue: SimpleQueue[Packet] = SimpleQueue()
+        self.audio_queue: deque[np.ndarray] = deque()
 
     def stop(self):
         self.stream.stop()
