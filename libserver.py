@@ -36,6 +36,7 @@ class Client:
 
     def send_packet(self, pkt: Packet) -> None:
         bts = pkt.to_bytes()
+        print("Bytes to send are: ", bts)
         self.request.sendall(bts)
 
     def authenticate(self) -> bool:
@@ -121,13 +122,9 @@ class PairedClientThread(Thread):
             self.a.send_packet(b_pkt)
 
     def quit(self, client: Client) -> None:
-        client.send_packet(Packet.quit())
         other_client = self.a if client is self.b else self.b
         other_client.send_packet(Packet.quit())
-        while (pkt := other_client.read_packet()) and (
-            pkt.ty != PacketType.Quit or pkt.ty != PacketType.NoPacket
-        ):
-            pass
+        client.send_packet(Packet.quit())
         self.on_close(self.id)
 
     def cleanup(self) -> None:

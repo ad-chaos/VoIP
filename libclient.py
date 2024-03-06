@@ -35,11 +35,11 @@ class Client:
                 self.send_packet(next(self.voice_producer))
                 maybe_pkt = self.read_packet()
                 if maybe_pkt.ty == PacketType.NoPacket or maybe_pkt.ty == PacketType.Quit:
-                    self.quit(True)
                     break
                 self.handle_packet(maybe_pkt)
         except (KeyboardInterrupt, StopIteration):
-            self.quit(False)
+            self.send_packet(Packet.quit())
+        print("\nSuccessfully Exited call!")
 
     def handle_packet(self, pkt: Packet | None) -> None:
         raise NotImplementedError
@@ -58,15 +58,6 @@ class Client:
             except TimeoutError:
                 print("\r\033[KWaiting to Pair" + "." * (i % 4 + 1), end="")  # ]
         self.socket.settimeout(None)
-
-    def quit(self, await_confirm: bool) -> None:
-        print("Quitting!")
-        self.send_packet(Packet.quit())
-        while await_confirm:
-            pkt = self.read_packet()
-            if pkt.ty == PacketType.NoPacket or pkt.ty == PacketType.Quit:
-                break
-        print("\nSuccessfully Exited call!")
 
     def send_packet(self, pkt: Packet) -> None:
         self.socket.sendall(pkt.to_bytes())
